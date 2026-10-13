@@ -10,67 +10,146 @@ open .                → Explorer
 open https://x.com    → browser
 ```
 
-Without your own settings, `open` uses the Windows default app for each file type. You can override that for any extension with `--set`.
+Without your own settings, `open` uses the Windows default app, exactly like double-clicking the file. You can override that for any extension with `--set`.
+
+`open` is a single small `open.exe`. It works the same in cmd, PowerShell and Windows Terminal, starts instantly, and needs nothing else installed. Like most command line tools it prints nothing when it succeeds.
 
 ## Install
 
-Requirements: Windows 10/11, with nothing else to install. It runs on Windows PowerShell 5.1, which comes with Windows.
+Requirements: Windows 10 or 11.
 
-```powershell
+**A. Download.** Get `open.exe` from [GitHub Releases](https://github.com/mrprohack/openanything/releases) and put it in a folder of its own, for example `%LOCALAPPDATA%\Programs\open`. The exe is not code-signed, so Windows SmartScreen or your browser may warn about it. If Windows blocks it, run `Unblock-File "$env:LOCALAPPDATA\Programs\open\open.exe"` in PowerShell.
+
+**B. Build it yourself.** You need nothing installed: the C# compiler that ships with Windows (.NET Framework 4) is enough.
+
+```
 git clone https://github.com/mrprohack/openanything.git
 cd openanything
-# add this folder to your user PATH, then open a new terminal
-[Environment]::SetEnvironmentVariable("Path", [Environment]::GetEnvironmentVariable("Path","User") + ";$PWD", "User")
+build.cmd
 ```
 
-Check that it works:
+This creates `open.exe` next to `build.cmd`.
+
+### Add it to your PATH
+
+Run this in PowerShell, with `$dir` set to the folder that contains `open.exe`. You can run it more than once. It keeps any `%VARIABLES%` in your existing PATH as they are.
+
+```powershell
+$dir = "$env:LOCALAPPDATA\Programs\open"     # folder that contains open.exe
+$key = [Microsoft.Win32.Registry]::CurrentUser.OpenSubKey('Environment', $true)
+$path = $key.GetValue('Path', '', 'DoNotExpandEnvironmentNames')
+if (($path -split ';') -notcontains $dir) {
+    $key.SetValue('Path', ((@($path.TrimEnd(';'), $dir) -ne '') -join ';'), 'ExpandString')
+}
+$key.Close()
+# tell Windows the environment changed, so new terminals see it
+[Environment]::SetEnvironmentVariable('OPEN_SETUP', '1', 'User'); [Environment]::SetEnvironmentVariable('OPEN_SETUP', $null, 'User')
+```
+
+Or use the Settings UI: press Win, type *environment*, choose **Edit environment variables for your account**, select **Path**, click **Edit → New**, and paste the folder.
+
+Then open a **new** terminal window and check:
 
 ```
-open --help
+open --version
 ```
+
+If `open` is still not found, sign out of Windows and back in.
+
+### Uninstall
+
+1. Remove the folder from your PATH:
+
+   ```powershell
+   $dir = "$env:LOCALAPPDATA\Programs\open"
+   $key = [Microsoft.Win32.Registry]::CurrentUser.OpenSubKey('Environment', $true)
+   $path = $key.GetValue('Path', '', 'DoNotExpandEnvironmentNames')
+   $key.SetValue('Path', ((($path -split ';') -ne $dir) -join ';'), 'ExpandString')
+   $key.Close()
+   ```
+
+   (or remove it in the Settings UI as above).
+2. Delete the folder that contains `open.exe`.
+3. Delete your settings: `Remove-Item -Recurse "$env:APPDATA\open"`.
 
 ## Usage
 
 ```
-open <target> [<target> ...]       open one or more files, folders or URLs
-open --with <app> <target>         open with <app> this one time
-open --set <ext> <app>             always open <ext> with <app>
-open --unset <ext>                 remove an override (back to the Windows default)
-open --list                        show your overrides
+open <target>...              open files, folders or URLs with their app
+open --with <app> <target>... use <app> this one time
+open --which <target>...      show which app would open each target, without opening it
+open --set <ext> <app>        always open <ext> with <app>
+open --unset <ext>            go back to the Windows default for <ext>
+open --list                   show your overrides
+open --version
+open --help
 ```
+
+`<ext>` is a file extension like `pdf` or `.pdf` (the dot is optional, case does not matter), or one of the special keys `url` and `dir`. Multi-part extensions like `tar.gz` work too; the longest match wins.
 
 ### Examples
 
 ```powershell
-open notes.txt                          # default text editor
-open a.png b.png c.pdf                  # several files at once
-open --with notepad config.json         # one-off: use Notepad
+open notes.txt                             # default text editor
+open a.png b.png c.pdf                     # several targets at once
+open *.png                                 # wildcards are expanded by open itself
+open www.github.com                        # www. is opened as https://www.github.com
+open mailto:me@example.com                 # any URL scheme: mailto:, ms-settings:, magnet:, ...
+open --with notepad config.json            # one-off: use Notepad this time
 
 open --set pdf "C:\Tools\SumatraPDF.exe"   # full path to an app
-open --set html firefox                    # short names work: firefox, chrome, msedge, notepad, ...
-open --set .md code                        # leading dot is optional
+open --set html firefox                    # or a short name (see "Finding app names")
+open --set .md code
 open --list
 open --unset pdf
+
+open --which report.pdf https://x.com      # what would open these? Opens nothing.
+open -- -notes.txt                         # -- ends options, for names starting with -
+```
+
+`--which` prints one line per target:
+
+```
+C:\docs\report.pdf -> C:\Tools\SumatraPDF.exe (override .pdf)
+https://x.com -> Windows default: Firefox
 ```
 
 ### Special keys
 
-Besides file extensions, `--set` accepts two special keys:
+Besides file extensions, `--set` and `--unset` accept two special keys:
 
-| Key   | Applies to                                       | Example                    |
-|-------|--------------------------------------------------|----------------------------|
-| `url` | anything with `://`, plus `mailto:` and `www.`   | `open --set url chrome`    |
-| `dir` | folders                                          | `open --set dir totalcmd`  |
+| Key   | Applies to                                                                 | Example                   |
+|-------|----------------------------------------------------------------------------|---------------------------|
+| `url` | every URL: `https://`, `mailto:`, `ms-settings:` and so on, plus `www.`    | `open --set url chrome`   |
+| `dir` | folders                                                                    | `open --set dir totalcmd` |
+
+## Finding app names
+
+`<app>` in `--set` and `--with` can be:
+
+- **A full path.** This always works: `"C:\Program Files\Mozilla Firefox\firefox.exe"`.
+- **A program on your PATH**, like `notepad` or `code`. Check with `where.exe code`.
+- **A name registered under Windows *App Paths***, like `firefox`, `chrome`, `msedge`, `winword` or `excel`. These work even though they are not on your PATH. List them with:
+
+  ```powershell
+  Get-ChildItem 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\App Paths', 'HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\App Paths' | Select-Object PSChildName
+  ```
+
+If `--set` can't find the app in any of these places it still saves the setting, but warns you, so you can catch typos.
 
 ## How it picks the app
 
-For each target, the first rule that matches wins:
+For each target (file, folder or URL), the first rule that matches wins:
 
 1. `--with <app>` on the command line
-2. Your override for that extension (or `url` / `dir`) in the config file
-3. The Windows default app for the file type, as set in *Settings → Apps → Default apps*
+2. Your override for that extension, or for `url` / `dir`
+3. The Windows default app, as set in *Settings → Apps → Default apps*
 
-The app is started through Windows `ShellExecute`. That means `<app>` can be a full path, a program on your `PATH`, or a name registered under Windows *App Paths* (which is why `firefox` and `chrome` work without a full path). `open` returns right away and does not wait for the app to close.
+If a file type has no default app, Windows asks *"How do you want to open this file?"*, just like a double-click.
+
+A target that exists on disk is always treated as a file or folder, even if it looks like a web address (a file named `www.example.com`). Otherwise it is a URL if it starts with a scheme like `https:` or `mailto:`, or with `www.`. Anything else that isn't found prints `open: not found: '<target>'`.
+
+`open` starts the app and returns right away. It does not wait for the app to close.
 
 ## Configuration
 
@@ -78,45 +157,47 @@ Overrides are stored as JSON in `%APPDATA%\open\config.json`:
 
 ```json
 {
-  ".pdf": "C:\\Tools\\SumatraPDF.exe",
   ".html": "firefox",
+  ".pdf": "C:\\Tools\\SumatraPDF.exe",
   "url": "chrome"
 }
 ```
 
-You can edit this file by hand or with `--set` / `--unset`.
+You can edit this file by hand or with `--set` / `--unset`. If the file is not valid JSON, `open` reports `open: invalid config ...` and leaves the file untouched until you fix it.
 
 ## Exit codes
 
-| Code | Meaning                                                    |
-|------|------------------------------------------------------------|
-| `0`  | every target opened                                        |
-| `1`  | at least one target was not found or could not be opened  |
+| Code | Meaning                                                                       |
+|------|-------------------------------------------------------------------------------|
+| `0`  | everything worked                                                             |
+| `1`  | a target was not found or could not be opened, or the config file has a problem |
+| `2`  | bad usage: unknown option, missing value or invalid extension                 |
 
-Error messages go to stderr, for example `open: not found: missing.png`.
+Errors and warnings go to stderr, for example `open: not found: 'missing.png'`.
+
+## Security
+
+`open` does what a double-click does. Opening an `.exe`, `.bat`, `.cmd`, `.lnk` or similar file **runs** it. Don't pass untrusted input (file names or URLs from someone else) to `open` in scripts.
 
 ## Limitations
 
-- The app is chosen by extension only, not by file content. Files with no extension use the Windows default.
-- An override is a single app with no extra arguments (`code -n` is not supported).
-- In PowerShell, `open` runs `open.cmd`. If you have defined an `open` alias or function yourself, that one wins.
-- Each run starts PowerShell, which adds roughly a quarter of a second of startup time.
-
-## How it runs
-
-`open.cmd` calls `powershell -NoProfile -ExecutionPolicy Bypass -File openanything.ps1`. `-ExecutionPolicy Bypass` applies only to that one call, so you do **not** need to change your system's execution policy. The script is deliberately not named `open.ps1`, so that PowerShell always runs `open.cmd` and never tries to run the script directly (which the default execution policy would block).
+- The app is chosen by extension only, not by file content.
+- An override is a single app with no extra arguments (`code -n` is not supported). The target is passed as one quoted argument.
+- A PowerShell 5.1 quirk: a quoted argument ending in a backslash, like `open '.\My Folder\' next`, swallows the argument that follows it. Leave off the trailing backslash: `open '.\My Folder' next`.
+- If you have defined your own `open` alias or function in PowerShell, that one wins over `open.exe`.
 
 ## Development
 
 ```
-powershell -ExecutionPolicy Bypass -File test_open.ps1    # prints "ok" if the app-selection logic is correct
+build.cmd                                                     # compile open.cs into open.exe
+powershell -NoProfile -ExecutionPolicy Bypass -File test.ps1  # build, then test; prints "ok"
 ```
 
 Files:
 
-- `openanything.ps1` — the whole tool
-- `open.cmd` — shim so `open` works in cmd and PowerShell
-- `test_open.ps1` — self-check for the app-selection logic
+- `open.cs` — the whole tool (C# 5, compiled by the in-box .NET Framework compiler)
+- `build.cmd` — builds `open.exe`
+- `test.ps1` — black-box tests. They use a temporary config and never launch an app.
 
 ## License
 
