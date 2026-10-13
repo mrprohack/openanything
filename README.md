@@ -14,7 +14,7 @@ Without your own settings, `open` uses the Windows default app for each file typ
 
 ## Install
 
-Requirements: Windows 10/11 and Python 3.10+ (the `py` launcher).
+Requirements: Windows 10/11, with nothing else to install. It runs on Windows PowerShell 5.1, which comes with Windows.
 
 ```powershell
 git clone https://github.com/mrprohack/openanything.git
@@ -100,15 +100,24 @@ Error messages go to stderr, for example `open: not found: missing.png`.
 - The app is chosen by extension only, not by file content. Files with no extension use the Windows default.
 - An override is a single app with no extra arguments (`code -n` is not supported).
 - In PowerShell, `open` runs `open.cmd`. If you have defined an `open` alias or function yourself, that one wins.
+- Each run starts PowerShell, which adds roughly a quarter of a second of startup time.
+
+## How it runs
+
+`open.cmd` calls `powershell -NoProfile -ExecutionPolicy Bypass -File openanything.ps1`. `-ExecutionPolicy Bypass` applies only to that one call, so you do **not** need to change your system's execution policy. The script is deliberately not named `open.ps1`, so that PowerShell always runs `open.cmd` and never tries to run the script directly (which the default execution policy would block).
 
 ## Development
 
 ```
-py test_open.py      # prints "ok" if the app-selection logic is correct
+powershell -ExecutionPolicy Bypass -File test_open.ps1    # prints "ok" if the app-selection logic is correct
 ```
 
 Files:
 
-- `open.py` — the whole tool
+- `openanything.ps1` — the whole tool
 - `open.cmd` — shim so `open` works in cmd and PowerShell
-- `test_open.py` — self-check for the app-selection logic
+- `test_open.ps1` — self-check for the app-selection logic
+
+## License
+
+[MIT](LICENSE)

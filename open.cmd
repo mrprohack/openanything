@@ -1,1 +1,1 @@
-@py "%~dp0open.py" %*
+@powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0openanything.ps1" %*
