@@ -18,7 +18,9 @@ Without your own settings, `open` uses the Windows default app, exactly like dou
 
 Requirements: Windows 10 or 11.
 
-Run this in PowerShell:
+**Easiest:** download [`open-setup.exe`](https://github.com/mrprohack/openanything/releases/latest/download/open-setup.exe) and double-click it. It installs `open` for your user (no admin rights) and adds it to your PATH. To remove it later, go to **Settings > Apps > Installed apps > open (openanything) > Uninstall**. The exe is not code-signed, so SmartScreen may say "Windows protected your PC". Click **More info > Run anyway**.
+
+**Or from a terminal,** run this in PowerShell:
 
 ```powershell
 irm https://raw.githubusercontent.com/mrprohack/openanything/main/install.ps1 | iex
@@ -175,8 +177,9 @@ powershell -NoProfile -ExecutionPolicy Bypass -File test.ps1  # build, then test
 Files:
 
 - `open.cs` — the whole tool (C# 5, compiled by the in-box .NET Framework compiler)
-- `build.cmd` — builds `open.exe`
+- `build.cmd` — builds `open.exe` and `open-setup.exe`
 - `test.ps1` — black-box tests. They use a temporary config and never launch an app.
+- `setup.cs` — the double-click installer `open-setup.exe` (`open.exe` is embedded in it; `/uninstall`, `/S` for silent)
 - `install.ps1` — installer: puts `open.exe` in `%LOCALAPPDATA%\Programs\open` and on your PATH (`-Uninstall` reverses it)
 
 ## License
