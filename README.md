@@ -18,37 +18,13 @@ Without your own settings, `open` uses the Windows default app, exactly like dou
 
 Requirements: Windows 10 or 11.
 
-**A. Download.** Get `open.exe` from [GitHub Releases](https://github.com/mrprohack/openanything/releases) and put it in a folder of its own, for example `%LOCALAPPDATA%\Programs\open`. The exe is not code-signed, so Windows SmartScreen or your browser may warn about it. If Windows blocks it, run `Unblock-File "$env:LOCALAPPDATA\Programs\open\open.exe"` in PowerShell.
-
-**B. Build it yourself.** You need nothing installed: the C# compiler that ships with Windows (.NET Framework 4) is enough.
-
-```
-git clone https://github.com/mrprohack/openanything.git
-cd openanything
-build.cmd
-```
-
-This creates `open.exe` next to `build.cmd`.
-
-### Add it to your PATH
-
-Run this in PowerShell, with `$dir` set to the folder that contains `open.exe`. You can run it more than once. It keeps any `%VARIABLES%` in your existing PATH as they are.
+Run this in PowerShell:
 
 ```powershell
-$dir = "$env:LOCALAPPDATA\Programs\open"     # folder that contains open.exe
-$key = [Microsoft.Win32.Registry]::CurrentUser.OpenSubKey('Environment', $true)
-$path = $key.GetValue('Path', '', 'DoNotExpandEnvironmentNames')
-if (($path -split ';') -notcontains $dir) {
-    $key.SetValue('Path', ((@($path.TrimEnd(';'), $dir) -ne '') -join ';'), 'ExpandString')
-}
-$key.Close()
-# tell Windows the environment changed, so new terminals see it
-[Environment]::SetEnvironmentVariable('OPEN_SETUP', '1', 'User'); [Environment]::SetEnvironmentVariable('OPEN_SETUP', $null, 'User')
+irm https://raw.githubusercontent.com/mrprohack/openanything/main/install.ps1 | iex
 ```
 
-Or use the Settings UI: press Win, type *environment*, choose **Edit environment variables for your account**, select **Path**, click **Edit → New**, and paste the folder.
-
-Then open a **new** terminal window and check:
+It downloads `open.exe` from the [latest release](https://github.com/mrprohack/openanything/releases/latest) into `%LOCALAPPDATA%\Programs\open` and adds that folder to your user PATH. No admin rights needed, and you can run it again to update. Then open a **new** terminal window and check:
 
 ```
 open --version
@@ -56,21 +32,24 @@ open --version
 
 If `open` is still not found, sign out of Windows and back in.
 
+**Build it yourself instead.** You need nothing installed: the C# compiler that ships with Windows (.NET Framework 4) is enough. `install.ps1` installs the `open.exe` next to it when there is one.
+
+```
+git clone https://github.com/mrprohack/openanything.git
+cd openanything
+build.cmd
+powershell -ExecutionPolicy Bypass -File install.ps1
+```
+
+The exe is not code-signed. If you download it by hand and Windows blocks it, run `Unblock-File open.exe`.
+
 ### Uninstall
 
-1. Remove the folder from your PATH:
+```powershell
+& ([scriptblock]::Create((irm https://raw.githubusercontent.com/mrprohack/openanything/main/install.ps1))) -Uninstall
+```
 
-   ```powershell
-   $dir = "$env:LOCALAPPDATA\Programs\open"
-   $key = [Microsoft.Win32.Registry]::CurrentUser.OpenSubKey('Environment', $true)
-   $path = $key.GetValue('Path', '', 'DoNotExpandEnvironmentNames')
-   $key.SetValue('Path', ((($path -split ';') -ne $dir) -join ';'), 'ExpandString')
-   $key.Close()
-   ```
-
-   (or remove it in the Settings UI as above).
-2. Delete the folder that contains `open.exe`.
-3. Delete your settings: `Remove-Item -Recurse "$env:APPDATA\open"`.
+This removes the folder and its PATH entry. Your settings stay in `%APPDATA%\open`; delete them with `Remove-Item -Recurse "$env:APPDATA\open"`.
 
 ## Usage
 
@@ -198,6 +177,7 @@ Files:
 - `open.cs` — the whole tool (C# 5, compiled by the in-box .NET Framework compiler)
 - `build.cmd` — builds `open.exe`
 - `test.ps1` — black-box tests. They use a temporary config and never launch an app.
+- `install.ps1` — installer: puts `open.exe` in `%LOCALAPPDATA%\Programs\open` and on your PATH (`-Uninstall` reverses it)
 
 ## License
 
